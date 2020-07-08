@@ -70,7 +70,7 @@ def get_rectangles(array):
     Returns:
         rectangle: Numpy array where each row contains the coordinates in order: left, right top and bottom
     """
-    ys, xs = np.where(array)
+    ys, _ = np.where(array)
     ys = list(set(ys))#set of row-indices sorted from small to large
     ys.sort()
     ys = np.array(ys)
@@ -81,9 +81,12 @@ def get_rectangles(array):
     for left, right in old_start_stop:#add to left_right_to_top
         left_right_to_top[left][right] = ys[0]#smallest i.e. uppermost y
 
+    val_range = list(range(ys[0],ys[-1]+1))[1:]
     rectangles = []
     if len(ys) > 1:
-        for y in range(ys[1],ys[-1]+1):
+        for y in val_range:
+            #print("y = ", end="")
+            #print(y)
             new_start_stop = get_start_stop(array[y,:])#get start stop for next y values
             for old in old_start_stop:
                 if not old in new_start_stop:#add thing
@@ -216,10 +219,12 @@ def get_surfaces(tensor):
     return triangles
 
 def voxels_to_mesh(tensor, color = "blue", opacity=0.50):
+    tensor = np.pad(tensor, 1)
     x, y, z = get_surfaces(tensor).T
     n_triangles = len(y)//3
     i = np.arange(n_triangles)*3
     j = np.arange(n_triangles)*3+1
     k = np.arange(n_triangles)*3+2
-    data=[go.Mesh3d(x=x, y=y, z=z,i=i,j=j,k=k, color=color, opacity=opacity)]
+
+    data=[go.Mesh3d(x=x, y=y, z=z,i=i,j=j,k=k, color=color, opacity=opacity, xaxis_range=xaxis_range, yaxis_range=yaxis_range]
     return data
