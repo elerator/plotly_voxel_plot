@@ -1,7 +1,11 @@
 from collections import defaultdict
 import numpy as np
 from scipy.ndimage import gaussian_filter, binary_erosion
-import plotly.graph_objects as go
+try:
+    import plotly.graph_objects as go
+except:
+    print("Plotly not available; Generating JSON possible only.")
+import json
 
 
 def triangulate_pixels(array):
@@ -178,7 +182,7 @@ def get_surface_voxels(tensor):
         front_voxels[y,x,z] = front_plane(tensor, [y,x,z])
     return top_voxels, bottom_voxels, left_voxels, right_voxels, back_voxels, front_voxels
 
-def get_surfaces(tensor):
+def get_surfaces(tensor, progress_callback = lambda x: None):
     top, bottom, left, right, back, front = get_surface_voxels(tensor)
     triangles = np.ndarray([0,3])
 
@@ -187,44 +191,70 @@ def get_surfaces(tensor):
         tri = triangulate_pixels(top[:,:,current_z].T)
         tri = np.insert(tri, 2, current_z+0.5, axis = 1)
         triangles = np.vstack([triangles, np.array(tri)])
+
+    progress_callback(1/6)
     _, _, zs = np.array(np.where(bottom))
     for current_z in list(set(zs)):#Top planes
         tri = triangulate_pixels(bottom[:,:,current_z].T)
         tri = np.insert(tri, 2, current_z-0.5, axis = 1)
         triangles = np.vstack([triangles, np.array(tri)])
 
+    progress_callback(2/6)
     _, xs, _ = np.array(np.where(back))
     for current_x in list(set(xs)):
         tri = triangulate_pixels(back[:,current_x,:].T)
         tri = np.insert(tri, 1, current_x-0.5, axis = 1)
         triangles = np.vstack([triangles, np.array(tri)])
+
+    progress_callback(3/6)
     _, xs, _ = np.array(np.where(front))
     for current_x in list(set(xs)):
         tri = triangulate_pixels(front[:,current_x,:].T)
         tri = np.insert(tri, 1, current_x+0.5, axis = 1)
         triangles = np.vstack([triangles, np.array(tri)])
 
+    progress_callback(4/6)
     ys, _, _ = np.array(np.where(right))
     for current_y in list(set(ys)):
         tri = triangulate_pixels(right[current_y,:,:].T)
         tri = np.insert(tri, 0, current_y+0.5, axis = 1)
         triangles = np.vstack([triangles, np.array(tri)])
 
+    progress_callback(5/6)
     ys, _, _ = np.array(np.where(left))
     for current_y in list(set(ys)):
         tri = triangulate_pixels(left[current_y,:,:].T)
         tri = np.insert(tri, 0, current_y-0.5, axis = 1)
         triangles = np.vstack([triangles, np.array(tri)])
-
+    progress_callback(6/6)
     return triangles
 
-def voxels_to_mesh(tensor, color = "blue", opacity=0.50):
-    tensor = np.pad(tensor, 1)
-    x, y, z = get_surfaces(tensor).T
+def voxels_to_raw_mesh(tensor, progress_callback=lambda x: None):
+    tensor = np.pad(tensor, 1, mode="constant")
+    x, y, z = get_surfaces(tensor, progress_callback).T
     n_triangles = len(y)//3
     i = np.arange(n_triangles)*3
     j = np.arange(n_triangles)*3+1
     k = np.arange(n_triangles)*3+2
+    return x, y, z, i, j, k
 
-    data=[go.Mesh3d(x=x, y=y, z=z,i=i,j=j,k=k, color=color, opacity=opacity, xaxis_range=xaxis_range, yaxis_range=yaxis_range]
-    return data
+def voxels_to_mesh(tensor, color = "blue", opacity=0.50, format="Mesh3d", progress_callback=lambda x: None):#xaxis_range, yaxis_range=
+    x, y, z, i, j, k = voxels_to_raw_mesh(tensor, progress_callback)
+    if format == "Mesh3d":
+        data=[go.Mesh3d(x=x, y=y, z=z,i=i,j=j,k=k, color=color, opacity=opacity)]
+        return data
+    elif format == "json":
+        data = {}
+        data["color"] = color
+        data["opcacity"] = opacity
+        data["type"] = "mesh3d"
+        data["x"] = list(x.astype("float64"))
+        data["y"] = list(y.astype("float64"))
+        data["z"] = list(z.astype("float64"))
+        data["i"] = list(i.astype("float64"))
+        data["j"] = list(j.astype("float64"))
+        data["k"] = list(k.astype("float64"))
+        data = json.dumps(data,separators=(',', ':'))
+        return data
+    else:
+        raise Exception("Format not supported. Supported formats are Mesh3d and json")
